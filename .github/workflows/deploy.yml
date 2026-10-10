@@ -32,9 +32,15 @@ jobs:
             set -euo pipefail
             cd "$APP_DIR"
 
+            echo "▸ Sauvegarde de la base avant déploiement"
+            mkdir -p "$HOME/backups"
+            docker exec klarte-db pg_dump -U klarte klarte | gzip > "$HOME/backups/klarte-$(date +%F_%H%M).sql.gz"
+            ls -1t "$HOME"/backups/klarte-*.sql.gz | tail -n +15 | xargs -r rm --
+
             echo "▸ Récupération de main"
             git fetch origin main
-            git reset --hard origin/main
+            # --ff-only : refuse (au lieu d'écraser) s'il y a des modifs locales sur le VPS
+            git merge --ff-only origin/main
             git log --oneline -1
 
             echo "▸ Rebuild de l'app (la base n'est pas touchée)"
