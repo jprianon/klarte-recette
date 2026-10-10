@@ -67,6 +67,26 @@ sudo certbot --nginx -d vie.klarte.re -d trade.klarte.re
 
 ## Mises à jour
 
+### Automatique (GitHub Actions)
+
+Chaque push sur `main` déclenche `.github/workflows/deploy.yml` : connexion SSH en tant que
+`deploy`, `git reset --hard origin/main`, rebuild du seul service `app` (la base n'est pas
+touchée), puis vérification que `127.0.0.1:3031` répond.
+
+Mise en place, une seule fois, sur le VPS :
+
+```bash
+cd /chemin/vers/klarte-recette && git pull
+sudo bash deploy/setup-gha-deploy.sh "$(pwd)"
+```
+
+Le script crée l'utilisateur `deploy`, sa clé SSH et les secrets `VPS_HOST`, `VPS_PORT`,
+`VPS_USER`, `VPS_APP_DIR`, `VPS_SSH_KEY` (via `gh` s'il est connecté, sinon il les affiche
+pour les coller dans Settings → Secrets → Actions). Relance possible depuis l'onglet
+Actions → Deploy VPS → Run workflow.
+
+### Manuelle
+
 ```bash
 git pull
 docker compose up -d --build     # dans chaque dossier concerné

@@ -1,0 +1,54 @@
+# Déploiement automatique sur le VPS à chaque push sur main.
+# Prérequis : secrets créés par deploy/setup-gha-deploy.sh (voir DEPLOY.md).
+name: Deploy VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Un seul déploiement à la fois, sans annuler celui en cours.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Déploiement SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: APP_DIR
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd "$APP_DIR"
+
+            echo "▸ Récupération de main"
+            git fetch origin main
+            git reset --hard origin/main
+            git log --oneline -1
+
+            echo "▸ Rebuild de l'app (la base n'est pas touchée)"
+            docker compose up -d --build app
+            docker image prune -f >/dev/null
+
+            echo "▸ Vérification"
+            for i in $(seq 1 30); do
+              if curl -fsS -o /dev/null http://127.0.0.1:3031/; then
+                echo "✓ App en ligne"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "✗ L'app ne répond pas sur :3031"
+            docker compose logs --tail 80 app
+            exit 1
