@@ -19,6 +19,17 @@ APP_DIR="$(realpath "$APP_DIR")"
 [[ $EUID -eq 0 ]] || { echo "✗ À lancer en root (sudo)."; exit 1; }
 [[ -d "$APP_DIR/.git" ]] || { echo "✗ $APP_DIR n'est pas un clone git."; exit 1; }
 [[ -f "$APP_DIR/docker-compose.yml" ]] || { echo "✗ docker-compose.yml absent de $APP_DIR."; exit 1; }
+[[ -f "$APP_DIR/.env" ]] || { echo "✗ Pas de .env dans $APP_DIR : ce n'est pas le dossier de prod."; exit 1; }
+
+# Garde-fou : si l'app tourne déjà, elle doit tourner depuis CE dossier,
+# sinon le déploiement créerait un 2e projet compose avec une base vide.
+RUNNING_DIR="$(docker inspect klarte-vie-web \
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+if [[ -n "$RUNNING_DIR" && "$(realpath "$RUNNING_DIR")" != "$APP_DIR" ]]; then
+  echo "✗ L'app en prod tourne depuis $RUNNING_DIR, pas depuis $APP_DIR."
+  echo "  Relance avec : sudo bash $0 $RUNNING_DIR"
+  exit 1
+fi
 
 # 1. Utilisateur deploy
 if ! id "$DEPLOY_USER" &>/dev/null; then
@@ -31,7 +42,8 @@ DEPLOY_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
 [[ -f "$APP_DIR/.env" ]] && chmod 600 "$APP_DIR/.env"
 # Repo public : pull en HTTPS, aucune clé GitHub nécessaire côté VPS.
-git -C "$APP_DIR" remote set-url origin "https://github.com/$REPO.git"
+# (exécuté en tant que deploy, propriétaire du dossier → pas d'erreur "dubious ownership")
+sudo -u "$DEPLOY_USER" git -C "$APP_DIR" remote set-url origin "https://github.com/$REPO.git"
 
 # 3. Clé SSH GitHub Actions -> VPS
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh"
@@ -46,18 +58,20 @@ chown "$DEPLOY_USER:$DEPLOY_USER" "$AUTH"
 chmod 600 "$AUTH"
 
 # Vérif rapide : deploy peut piloter le compose
-if sudo -u "$DEPLOY_USER" docker compose --project-directory "$APP_DIR" ps >/dev/null 2>&1; then
+if ERR="$(cd "$APP_DIR" && sudo -u "$DEPLOY_USER" docker compose ps 2>&1 >/dev/null)"; then
   echo "✓ deploy a accès à Docker"
 else
-  echo "⚠ deploy n'arrive pas à lancer 'docker compose ps' : vérifie le groupe docker."
+  echo "⚠ deploy n'arrive pas à lancer 'docker compose ps' :"
+  echo "$ERR" | sed 's/^/    /'
 fi
 
-# Paramètres de connexion
-PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+# Paramètres de connexion (|| true : sshd -T peut sortir en erreur sans que ce soit grave)
+SSHD_CFG="$(sshd -T 2>/dev/null || true)"
+PORT="$(awk '/^port /{print $2; exit}' <<<"$SSHD_CFG")"
 PORT="${PORT:-22}"
 HOST="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
 
-if sshd -T 2>/dev/null | grep -qE '^(allowusers|allowgroups) '; then
+if grep -qE '^(allowusers|allowgroups) ' <<<"$SSHD_CFG"; then
   echo "⚠ sshd a une directive AllowUsers/AllowGroups : ajoute-y '$DEPLOY_USER', puis 'systemctl reload ssh'."
 fi
 
