@@ -1,3 +1,8 @@
+# Nom de projet figé : les volumes (db-data = la base) et les conteneurs gardent
+# le même nom quel que soit le dossier où le repo est cloné sur le VPS.
+# NE PAS CHANGER : un autre nom créerait une base vide.
+name: klarte-vie-web
+
 services:
   app:
     build:
