@@ -1,7 +1,7 @@
 {
-  "name": "Klarte Vie",
-  "short_name": "Klarte",
-  "description": "Ton carnet de recettes, ton trading et ton sport, réunis en un seul dashboard.",
+  "name": "Clarté — Livre de recettes",
+  "short_name": "Clarté",
+  "description": "Ton livre de recettes : note libre ou photo, l'IA la met en fiche.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -14,13 +14,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Klarte Vie — Carnet de recettes",
+  title: "Clarté — Livre de recettes",
   description: "Ton carnet de recettes : note libre ou photo, l'IA la met en fiche.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Klarte",
+    title: "Clarté",
   },
   icons: {
     icon: "/icons/icon.svg",
