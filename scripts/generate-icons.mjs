@@ -1,5 +1,6 @@
 /**
- * Génère les icônes PNG de la PWA à partir de public/icons/icon.svg.
+ * Génère les icônes PNG de la PWA à partir de public/icons/icon.svg
+ * (et icon-maskable.svg, pleine page, pour les icônes que l'OS masque lui-même).
  * Usage : `pnpm add -D sharp && node scripts/generate-icons.mjs`
  * (sharp n'est requis que pour cette étape, pas au runtime.)
  */
@@ -20,17 +21,18 @@ async function main() {
   }
 
   const svg = await readFile(join(iconsDir, "icon.svg"));
+  const maskable = await readFile(join(iconsDir, "icon-maskable.svg"));
   await mkdir(iconsDir, { recursive: true });
 
   const targets = [
     { name: "icon-192.png", size: 192 },
     { name: "icon-512.png", size: 512 },
-    { name: "maskable-512.png", size: 512 },
-    { name: "apple-touch-icon.png", size: 180 },
+    { name: "maskable-512.png", size: 512, source: maskable },
+    { name: "apple-touch-icon.png", size: 180, source: maskable },
   ];
 
-  for (const { name, size } of targets) {
-    const png = await sharp(svg).resize(size, size).png().toBuffer();
+  for (const { name, size, source = svg } of targets) {
+    const png = await sharp(source, { density: 300 }).resize(size, size).png().toBuffer();
     await writeFile(join(iconsDir, name), png);
     console.log(`✓ ${name} (${size}px)`);
   }

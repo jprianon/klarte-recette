@@ -47,7 +47,7 @@ export default function AccesPage() {
         <span className="mx-auto mb-4 grid size-14 place-items-center rounded-[18px] bg-primary text-primary-foreground shadow-lg">
           <Lock className="size-7" />
         </span>
-        <h1 className="text-center font-display text-2xl font-bold tracking-tight">Klarte</h1>
+        <h1 className="text-center font-display text-2xl font-bold tracking-tight">Clarté</h1>
         <p className="mt-1 text-center text-[14px] text-muted-foreground">
           Entre le code d&apos;accès partagé.
         </p>
