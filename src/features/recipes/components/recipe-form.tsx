@@ -4,9 +4,11 @@ import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { RecipeDifficulty, RecipeDraft, RecipeIngredient } from "@/types";
 import { SUGGESTED_CATEGORIES } from "@/features/recipes/format";
+import { DictateButton } from "./dictate-button";
 
 /**
  * Formulaire structuré d'une recette — réutilisé pour la saisie manuelle (vide)
@@ -133,21 +135,37 @@ export function RecipeForm({
         </select>
       </Field>
       <Field label="Ingrédients (un par ligne)">
-        <textarea
-          rows={5}
-          className={inputCls}
-          value={ingredientsText}
-          onChange={(e) => setIngredientsText(e.target.value)}
-          placeholder={"2 blancs de poulet\n400 ml lait de coco\n1 oignon"}
-        />
+        <div className="relative">
+          <textarea
+            rows={5}
+            className={cn(inputCls, "pb-11")}
+            value={ingredientsText}
+            onChange={(e) => setIngredientsText(e.target.value)}
+            placeholder={"2 blancs de poulet\n400 ml lait de coco\n1 oignon"}
+          />
+          <DictateButton
+            value={ingredientsText}
+            onChange={setIngredientsText}
+            joiner={"\n"}
+            className="absolute bottom-2 right-2"
+          />
+        </div>
       </Field>
       <Field label="Préparation (une étape par ligne)">
-        <textarea
-          rows={5}
-          className={inputCls}
-          value={stepsText}
-          onChange={(e) => setStepsText(e.target.value)}
-        />
+        <div className="relative">
+          <textarea
+            rows={5}
+            className={cn(inputCls, "pb-11")}
+            value={stepsText}
+            onChange={(e) => setStepsText(e.target.value)}
+          />
+          <DictateButton
+            value={stepsText}
+            onChange={setStepsText}
+            joiner={"\n"}
+            className="absolute bottom-2 right-2"
+          />
+        </div>
       </Field>
       <Field label="Tags (séparés par des virgules)">
         <input

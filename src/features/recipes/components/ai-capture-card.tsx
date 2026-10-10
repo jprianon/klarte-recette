@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { RecipeDraft } from "@/types";
 import { createRecipe, draftToView, formatRecipe, importUrl } from "@/features/recipes/service";
+import { DictateButton } from "./dictate-button";
 import { RecipeForm } from "./recipe-form";
 import { RecipeTemplate } from "./recipe-template";
 
@@ -179,15 +180,21 @@ export function AiCaptureCard({
   // mode === "ai"
   return (
     <div className="flex flex-col gap-3">
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        rows={6}
-        placeholder={
-          "poulet curry coco pour 4\n2 blancs de poulet, une boîte de lait coco, oignon, ail, 2 cs de pâte de curry rouge…\nfaire revenir oignon ail, ajouter poulet, déglacer au lait coco, mijoter 20 min. riz à côté.\nenv 30 min, on adore"
-        }
-        className="w-full resize-y rounded-2xl border border-border bg-secondary/40 p-4 text-[13.5px] leading-relaxed text-foreground/80 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
+      <div className="relative">
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={6}
+          placeholder={
+            "poulet curry coco pour 4\n2 blancs de poulet, une boîte de lait coco, oignon, ail, 2 cs de pâte de curry rouge…\nfaire revenir oignon ail, ajouter poulet, déglacer au lait coco, mijoter 20 min. riz à côté.\nenv 30 min, on adore"
+          }
+          className="w-full resize-y rounded-2xl border border-border bg-secondary/40 p-4 pb-12 text-[13.5px] leading-relaxed text-foreground/80 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <DictateButton value={note} onChange={setNote} className="absolute bottom-3 right-3" />
+      </div>
+      <p className="-mt-1 text-[12.5px] text-muted-foreground">
+        Écris ou appuie sur le micro pour dicter ta recette, même en vrac.
+      </p>
       <Button onClick={submitAi} disabled={busy}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
         {busy ? "Reformatage…" : "Générer la recette"}
