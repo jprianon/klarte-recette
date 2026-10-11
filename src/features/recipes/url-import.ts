@@ -38,16 +38,70 @@ async function fetchWithTimeout(url: string, ms: number, ua: string): Promise<Re
   }
 }
 
-/** Décode les entités HTML les plus courantes. */
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+/** Entités nommées courantes (accents français, ponctuation typographique). */
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  eacute: "é",
+  egrave: "è",
+  ecirc: "ê",
+  euml: "ë",
+  Eacute: "É",
+  Egrave: "È",
+  Ecirc: "Ê",
+  agrave: "à",
+  acirc: "â",
+  auml: "ä",
+  Agrave: "À",
+  Acirc: "Â",
+  icirc: "î",
+  iuml: "ï",
+  ocirc: "ô",
+  ouml: "ö",
+  Ocirc: "Ô",
+  ugrave: "ù",
+  ucirc: "û",
+  uuml: "ü",
+  ccedil: "ç",
+  Ccedil: "Ç",
+  oelig: "œ",
+  OElig: "Œ",
+  aelig: "æ",
+  deg: "°",
+  frac12: "½",
+  frac14: "¼",
+  frac34: "¾",
+  rsquo: "’",
+  lsquo: "‘",
+  rdquo: "”",
+  ldquo: "“",
+  laquo: "«",
+  raquo: "»",
+  hellip: "…",
+  ndash: "–",
+  mdash: "—",
+  times: "×",
+  middot: "·",
+};
+
+function codePoint(n: number, raw: string): string {
+  return Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : raw;
+}
+
+/** Décode les entités HTML : nommées, décimales (&#233;) et hexadécimales (&#xe9;). */
+export function decodeEntities(s: string): string {
+  // Deux passes : certains sites double-encodent (« &amp;#xe9; »).
+  for (let i = 0; i < 2; i++) {
+    s = s
+      .replace(/&#x([0-9a-f]+);/gi, (raw, h) => codePoint(parseInt(h, 16), raw))
+      .replace(/&#(\d+);/g, (raw, n) => codePoint(Number(n), raw))
+      .replace(/&([a-z][a-z0-9]*);/gi, (raw, name) => NAMED_ENTITIES[name] ?? raw);
+  }
+  return s;
 }
 
 /** HTML → texte lisible (retire script/style/nav, aplatit les balises). */
@@ -120,7 +174,8 @@ function recipeToText(r: JsonLdRecipe): string {
     lines.push("Préparation :");
     for (const s of stepTexts) lines.push(s);
   }
-  return lines.join("\n");
+  // Les champs JSON-LD contiennent souvent des entités HTML (« Po&#xea;l&#xe9;e »).
+  return decodeEntities(lines.join("\n"));
 }
 
 /**
