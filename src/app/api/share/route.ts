@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { dbCreateRecipe, dbSetImage, hasDb } from "@/lib/db";
-import { fetchRemoteImage, importRecipeFromUrl } from "@/features/recipes/url-import";
+import { fetchFirstImage, importRecipeFromUrl } from "@/features/recipes/url-import";
 
 /**
  * POST /api/share — « Partager vers Clarté » (Raccourci iOS, partage Android).
@@ -54,13 +54,11 @@ async function importAndSave(url: string): Promise<ShareOutcome> {
   if (!result.ok) return result;
 
   const recipe = await dbCreateRecipe(result.draft, result.sourceUrl, "ai");
-  if (result.imageUrl) {
-    const img = await fetchRemoteImage(result.imageUrl);
-    if (img) {
-      await dbSetImage(recipe.id, img.contentType, img.buf).catch((e) =>
-        console.error("[api/share] photo non enregistrée", e),
-      );
-    }
+  const img = await fetchFirstImage(result.imageUrls, result.sourceUrl);
+  if (img) {
+    await dbSetImage(recipe.id, img.contentType, img.buf).catch((e) =>
+      console.error("[api/share] photo non enregistrée", e),
+    );
   }
   return { ok: true, id: recipe.id, title: recipe.title };
 }
