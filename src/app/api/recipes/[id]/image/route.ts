@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { dbDeleteImage, dbGetImage, dbSetImage, hasDb } from "@/lib/db";
+import { fetchRemoteImage } from "@/features/recipes/url-import";
 
 /**
  * GET    /api/recipes/:id/image  → l'image (ou 404)
@@ -53,29 +54,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
   } catch {
     return new NextResponse(null, { status: 500 });
-  }
-}
-
-/** Récupère une image distante (import auto depuis une URL de recette). */
-async function fetchRemoteImage(url: string): Promise<{ contentType: string; buf: Buffer } | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15_000);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      redirect: "follow",
-      headers: { "user-agent": "Mozilla/5.0", accept: "image/*" },
-    });
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.startsWith("image/")) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length === 0 || buf.length > 10_000_000) return null;
-    return { contentType: ct.split(";")[0]!.trim(), buf };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

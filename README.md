@@ -10,6 +10,13 @@ fiche structurée par l'**IA**, avec dossiers, planning des repas et liste de co
 > pour les données, stockage **Postgres auto-hébergé**. Le lien **Trading** ouvre l'app
 > voisine [`../klarte-trade`](../klarte-trade) dans un nouvel onglet.
 
+## Partage depuis Pinterest / l'iPhone
+
+`POST /api/share` importe la recette d'un lien partagé (pins Pinterest suivis
+jusqu'au site source), la met en fiche via l'IA et l'enregistre avec sa photo.
+Sur iPhone, ça passe par un Raccourci iOS : voir [`docs/raccourci-ios.md`](docs/raccourci-ios.md).
+Sur Android, la PWA apparaît directement dans le menu Partager (`share_target` → `/partage`).
+
 ## Contexte
 
 - Framework : **Next.js 15** (App Router) + **React 19**, **TypeScript** strict.
