@@ -23,7 +23,8 @@ export function middleware(req: NextRequest) {
     pathname === "/sw.js" ||
     pathname === "/favicon.ico" ||
     pathname === "/acces" ||
-    pathname === "/api/acces"
+    pathname === "/api/acces" ||
+    pathname === "/api/share" // vérifie lui-même le code (en-tête x-access-code du Raccourci iOS)
   ) {
     return NextResponse.next();
   }
