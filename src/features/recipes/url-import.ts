@@ -123,21 +123,40 @@ function recipeToText(r: JsonLdRecipe): string {
   return lines.join("\n");
 }
 
-/** Choisit une URL d'image dans un champ JSON-LD `image` (string/array/objet). */
-function pickImage(img: unknown): string | null {
-  if (!img) return null;
-  if (typeof img === "string") return img;
+/**
+ * URLs d'images d'un champ JSON-LD `image` (string / tableau / ImageObject).
+ * Les références `{"@id": …}` (Yoast/WordPress) sont résolues via `byId`.
+ */
+function collectImages(img: unknown, byId: Map<string, unknown>, out: string[], depth = 0): void {
+  if (!img || depth > 4) return;
+  if (typeof img === "string") {
+    out.push(img);
+    return;
+  }
   if (Array.isArray(img)) {
-    for (const i of img) {
-      const u = pickImage(i);
-      if (u) return u;
+    for (const i of img) collectImages(i, byId, out, depth + 1);
+    return;
+  }
+  if (typeof img === "object") {
+    const o = img as Record<string, unknown>;
+    for (const k of ["url", "contentUrl", "thumbnailUrl"]) {
+      if (typeof o[k] === "string") out.push(o[k] as string);
     }
-    return null;
+    const ref = typeof o["@id"] === "string" ? byId.get(o["@id"] as string) : undefined;
+    if (ref && ref !== img) collectImages(ref, byId, out, depth + 1);
   }
-  if (typeof img === "object" && "url" in (img as object)) {
-    return pickImage((img as { url: unknown }).url);
+}
+
+/** Index des nœuds JSON-LD par @id (pour résoudre les références d'image). */
+function indexById(node: unknown, map: Map<string, unknown>): void {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const n of node) indexById(n, map);
+    return;
   }
-  return null;
+  const o = node as Record<string, unknown>;
+  if (typeof o["@id"] === "string" && Object.keys(o).length > 1) map.set(o["@id"] as string, o);
+  if (o["@graph"]) indexById(o["@graph"], map);
 }
 
 /** Contenu de la 1ʳᵉ balise <meta> correspondant à l'un des noms (property/name). */
@@ -168,38 +187,66 @@ function captionText(html: string): string {
   return [title, desc].filter(Boolean).join("\n").trim();
 }
 
-/** Image de repli via les métas Open Graph / Twitter. */
-function metaImage(html: string): string | null {
+/** Images des métas Open Graph / Twitter (entités HTML décodées). */
+function metaImages(html: string): string[] {
+  const out: string[] = [];
+  const keys = "og:image|og:image:secure_url|og:image:url|twitter:image|twitter:image:src";
   const patterns = [
-    /<meta[^>]+(?:property|name)=["'](?:og:image|og:image:secure_url|twitter:image)["'][^>]+content=["']([^"']+)["']/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i,
+    new RegExp(
+      `<meta[^>]+(?:property|name)=["'](?:${keys})["'][^>]+content=["']([^"']+)["']`,
+      "gi",
+    ),
+    new RegExp(
+      `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:${keys})["']`,
+      "gi",
+    ),
   ];
   for (const re of patterns) {
-    const m = html.match(re);
-    if (m?.[1]) return m[1];
+    for (const m of html.matchAll(re)) out.push(decodeEntities(m[1]!));
   }
-  return null;
+  return out;
+}
+
+/** Résout, filtre (http/https, pas de data:) et dédoublonne une liste d'URLs d'images. */
+function cleanImageUrls(urls: string[], pageUrl: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of urls) {
+    try {
+      const u = new URL(decodeEntities(raw.trim()), pageUrl);
+      if (!/^https?:$/.test(u.protocol) || seen.has(u.href)) continue;
+      seen.add(u.href);
+      out.push(u.href);
+    } catch {
+      /* URL invalide */
+    }
+  }
+  return out;
 }
 
 /**
- * Extrait la recette d'une page : JSON-LD d'abord (texte + image), sinon texte
- * brut nettoyé et image Open Graph. Les URLs relatives sont résolues.
+ * Extrait la recette d'une page : JSON-LD d'abord (texte + images), sinon
+ * légende og: ou texte brut. `images` = photos candidates, de la plus
+ * pertinente à la moins pertinente (JSON-LD, puis Open Graph / Twitter).
  */
-function extractRecipe(html: string, pageUrl: string): { text: string; imageUrl: string | null } {
+function extractRecipe(html: string, pageUrl: string): { text: string; images: string[] } {
   let text = "";
-  let imageUrl: string | null = null;
+  const found: string[] = [];
 
   const scripts = html.matchAll(
     /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
   );
   for (const m of scripts) {
     try {
-      const recipe = findRecipe(JSON.parse(m[1]!.trim()));
+      const json: unknown = JSON.parse(m[1]!.trim());
+      const recipe = findRecipe(json);
       if (recipe) {
         const t = recipeToText(recipe);
         if (t.trim().length >= 30) {
           text = t;
-          imageUrl = pickImage(recipe.image);
+          const byId = new Map<string, unknown>();
+          indexById(json, byId);
+          collectImages(recipe.image, byId, found);
           break;
         }
       }
@@ -214,17 +261,8 @@ function extractRecipe(html: string, pageUrl: string): { text: string; imageUrl:
     const caption = captionText(html);
     text = caption.length >= 30 ? caption : htmlToText(html).slice(0, 8000);
   }
-  if (!imageUrl) imageUrl = metaImage(html);
-
-  // Résout les URLs relatives contre la page source.
-  if (imageUrl) {
-    try {
-      imageUrl = new URL(imageUrl, pageUrl).href;
-    } catch {
-      imageUrl = null;
-    }
-  }
-  return { text, imageUrl };
+  found.push(...metaImages(html));
+  return { text, images: cleanImageUrls(found, pageUrl) };
 }
 
 // ── Pinterest ────────────────────────────────────────────────────────────────
@@ -244,6 +282,18 @@ function unescapeJson(s: string): string {
   return s
     .replace(/\\u([0-9a-f]{4})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/\\\//g, "/");
+}
+
+/** Photos du pin en grand format (i.pinimg.com), trouvées dans la page. */
+export function pinterestImages(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(
+    /https?:(?:\\?\/){2}i\.pinimg\.com(?:\\?\/)(?:originals|736x|564x)(?:\\?\/)[^"'\s<>\\]+?\.(?:jpe?g|png|webp)/gi,
+  )) {
+    out.push(unescapeJson(m[0]));
+  }
+  // originals d'abord, puis les tailles réduites
+  return out.sort((a, b) => Number(b.includes("/originals/")) - Number(a.includes("/originals/")));
 }
 
 /** Lien externe (le site de la recette) d'une page de pin, ou null. */
@@ -286,24 +336,51 @@ async function fetchHtml(
   }
 }
 
-/** Récupère une image distante (photo de la recette). */
+/** Type d'image d'après les premiers octets (certains CDN renvoient octet-stream). */
+function sniffImageType(buf: Buffer): string | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+    return "image/png";
+  if (buf.subarray(0, 4).toString("latin1") === "GIF8") return "image/gif";
+  if (
+    buf.subarray(0, 4).toString("latin1") === "RIFF" &&
+    buf.subarray(8, 12).toString("latin1") === "WEBP"
+  )
+    return "image/webp";
+  if (buf.subarray(4, 8).toString("latin1") === "ftyp") {
+    const brand = buf.subarray(8, 12).toString("latin1");
+    if (brand.startsWith("avi")) return "image/avif";
+    if (brand.startsWith("hei") || brand === "mif1") return "image/heic";
+  }
+  return null;
+}
+
+/**
+ * Récupère une image distante (photo de la recette). On se présente comme
+ * Safari et avec la page d'origine en Referer : beaucoup de blogs / CDN
+ * refusent sinon (protection anti-hotlink).
+ */
 export async function fetchRemoteImage(
   url: string,
+  referer?: string,
 ): Promise<{ contentType: string; buf: Buffer } | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      redirect: "follow",
-      headers: { "user-agent": "Mozilla/5.0", accept: "image/*" },
-    });
+    const headers: Record<string, string> = {
+      "user-agent": SAFARI_UA,
+      accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5",
+      "accept-language": "fr,en;q=0.8",
+    };
+    if (referer) headers.referer = referer;
+    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow", headers });
     if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.startsWith("image/")) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length === 0 || buf.length > 10_000_000) return null;
-    return { contentType: ct.split(";")[0]!.trim(), buf };
+    const declared = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
+    const contentType = declared.startsWith("image/") ? declared : sniffImageType(buf);
+    return contentType ? { contentType, buf } : null;
   } catch {
     return null;
   } finally {
@@ -311,10 +388,37 @@ export async function fetchRemoteImage(
   }
 }
 
+/**
+ * Essaie les photos candidates dans l'ordre et renvoie la première qui se
+ * télécharge (avec puis sans Referer). Journalise les échecs pour le debug.
+ */
+export async function fetchFirstImage(
+  candidates: string[],
+  referer?: string,
+): Promise<{ contentType: string; buf: Buffer; url: string } | null> {
+  for (const url of candidates.slice(0, 6)) {
+    const img =
+      (await fetchRemoteImage(url, referer)) ?? (referer ? await fetchRemoteImage(url) : null);
+    if (img) return { ...img, url };
+    console.warn("[url-import] photo non récupérée :", url);
+  }
+  if (!candidates.length)
+    console.warn("[url-import] aucune photo trouvée sur la page", referer ?? "");
+  return null;
+}
+
 // ── Point d'entrée ───────────────────────────────────────────────────────────
 
 export type UrlImportResult =
-  | { ok: true; draft: RecipeDraft; imageUrl: string | null; sourceUrl: string }
+  | {
+      ok: true;
+      draft: RecipeDraft;
+      /** Meilleure photo candidate (compatibilité : 1ʳᵉ de `imageUrls`). */
+      imageUrl: string | null;
+      /** Photos candidates, de la plus pertinente à la moins pertinente. */
+      imageUrls: string[];
+      sourceUrl: string;
+    }
   | { ok: false; status: number; error: string; message: string };
 
 export async function importRecipeFromUrl(url: string): Promise<UrlImportResult> {
@@ -336,10 +440,10 @@ export async function importRecipeFromUrl(url: string): Promise<UrlImportResult>
   }
 
   let sourceUrl = page.finalUrl;
-  let { text, imageUrl } = extractRecipe(page.html, page.finalUrl);
+  let { text, images } = extractRecipe(page.html, page.finalUrl);
 
-  // Pin Pinterest → on suit le lien vers le site de la recette. La photo du pin
-  // sert de repli si la page source n'en fournit pas.
+  // Pin Pinterest → on suit le lien vers le site de la recette. Les photos du
+  // pin restent en repli derrière celles de la page source.
   let host = "";
   try {
     host = new URL(page.finalUrl).hostname;
@@ -347,7 +451,8 @@ export async function importRecipeFromUrl(url: string): Promise<UrlImportResult>
     /* ignore */
   }
   if (isPinterest(host)) {
-    const pinImage = imageUrl;
+    const pinImages = cleanImageUrls([...images, ...pinterestImages(page.html)], page.finalUrl);
+    images = pinImages;
     const source = pinterestSourceUrl(page.html);
     if (source) {
       const src = await fetchHtml(source);
@@ -355,9 +460,9 @@ export async function importRecipeFromUrl(url: string): Promise<UrlImportResult>
         const extracted = extractRecipe(src.html, src.finalUrl);
         if (extracted.text.trim().length >= 30) {
           text = extracted.text;
-          imageUrl = extracted.imageUrl ?? pinImage;
           sourceUrl = src.finalUrl;
         }
+        images = cleanImageUrls([...extracted.images, ...pinImages], src.finalUrl);
       }
     }
   }
@@ -374,5 +479,11 @@ export async function importRecipeFromUrl(url: string): Promise<UrlImportResult>
 
   const result = await formatNote(text);
   if (!result.ok) return result;
-  return { ok: true, draft: result.draft, imageUrl, sourceUrl };
+  return {
+    ok: true,
+    draft: result.draft,
+    imageUrl: images[0] ?? null,
+    imageUrls: images,
+    sourceUrl,
+  };
 }
