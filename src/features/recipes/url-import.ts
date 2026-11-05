@@ -1,4 +1,5 @@
 import { formatNote } from "./ai-provider";
+import { isTikTok, tiktokRecipeSource } from "./tiktok";
 import type { RecipeDraft } from "@/types";
 
 /**
@@ -476,7 +477,28 @@ export type UrlImportResult =
     }
   | { ok: false; status: number; error: string; message: string };
 
+/** TikTok : légende complète (oEmbed) + transcription des sous-titres → IA. */
+async function importFromTikTok(url: string): Promise<UrlImportResult> {
+  const src = await tiktokRecipeSource(url);
+  if (!src.ok) return src;
+  const result = await formatNote(src.text);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    draft: result.draft,
+    imageUrl: src.images[0] ?? null,
+    imageUrls: src.images,
+    sourceUrl: src.sourceUrl,
+  };
+}
+
 export async function importRecipeFromUrl(url: string): Promise<UrlImportResult> {
+  try {
+    if (isTikTok(new URL(url).hostname)) return importFromTikTok(url);
+  } catch {
+    /* URL invalide : le fetch générique renverra l'erreur */
+  }
+
   const page = await fetchHtml(url);
   if (!("html" in page)) {
     return page.status
