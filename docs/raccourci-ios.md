@@ -4,8 +4,8 @@ Sur iPhone, une app ajoutée depuis Safari ne peut pas apparaître dans le menu
 **Partager**. On passe donc par un **Raccourci iOS** qui envoie le lien à
 `/api/share` : le serveur récupère la recette (un pin Pinterest est suivi
 jusqu'au blog d'origine), l'IA la met en fiche, et elle est enregistrée avec sa
-photo. Ça marche depuis Pinterest, Safari, Instagram ou n'importe quelle app
-qui partage un lien.
+photo. Ça marche depuis Pinterest, TikTok, Safari, Instagram ou n'importe
+quelle app qui partage un lien.
 
 ## Créer le raccourci (une seule fois, environ 2 minutes)
 
@@ -35,6 +35,13 @@ qui partage un lien.
 Dans Pinterest, ouvre un pin, touche **Partager** puis **Ajouter à Clarté**.
 Si l'icône n'apparaît pas, touche **Plus** au bout de la ligne des apps ou des
 actions.
+
+Dans **TikTok** : touche la flèche **Partager** de la vidéo, puis **Plus**
+(ou **Autres**) au bout de la ligne des apps : la feuille de partage d'iOS
+s'ouvre, touche **Ajouter à Clarté**. Le serveur récupère la légende complète
+**et les sous-titres automatiques** de la vidéo : une recette dite à l'oral est
+donc importée aussi. Seule limite : une vidéo sans légende détaillée ni
+sous-titres (musique seule, texte incrusté dans l'image) ne peut pas être lue.
 
 Une notification s'affiche :
 - « « Tarte au citron » ajoutée à Clarté. » : la recette est dans ton carnet ;
